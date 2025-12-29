@@ -5,12 +5,11 @@ import plotly.express as px
 st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="💰")
 
 # --- CONFIGURACIÓN DE ENLACES ---
-# 1. PEGÁ ACÁ EL LINK DE TU EXCEL (El que publicaste como .csv en 'Archivo > Compartir > Publicar en la web')
-EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m30Tw2p8sr8LRs_ZuEpIskZqZsdr0y7-/pub?output=csv"
+# 1. Pegá aquí el link largo que copiaste recién
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m3OTw2p8sr8LRs_ZuEplskZqZsdrOy7-/pub?output=csv"
 
-# 2. PEGÁ ACÁ EL LINK DE TU FORMULARIO (El de 'Enviar' formulario)
-FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform?usp=viewform"
-
+# 2. Corregimos el del formulario (le borramos el final para que no dé error)
+FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform"
 st.title("💰 Mi Control Financiero Permanente")
 
 # --- TABS ---
@@ -69,9 +68,9 @@ with tab_graficos:
 
 with tab_carga:
     st.subheader("Registrar Nuevo Movimiento")
-    st.info("Completá el formulario abajo. Al terminar, dale a 'Enviar' y los datos aparecerán en la pestaña de Resumen.")
-    # Formulario de Google embebido
-    st.components.v1.iframe(FORM_LINK, height=800, scrolling=True)
+    # Ponemos un botón grande para que se abra perfecto en el celu
+    st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
+    st.info("Hacé clic arriba para cargar un gasto. Al terminar, volvé aquí y actualizá para ver los gráficos.")
 
 
 
