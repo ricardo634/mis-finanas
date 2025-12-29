@@ -6,10 +6,10 @@ st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="�
 
 # --- CONFIGURACIÓN DE ENLACES ---
 # 1. PEGÁ ACÁ EL LINK DE TU EXCEL (El que publicaste como .csv en 'Archivo > Compartir > Publicar en la web')
-EXCEL_CSV = "TU_LINK_DE_EXCEL_AQUI"
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m30Tw2p8sr8LRs_ZuEpIskZqZsdr0y7-/pubhtml"
 
 # 2. PEGÁ ACÁ EL LINK DE TU FORMULARIO (El de 'Enviar' formulario)
-FORM_LINK = "TU_LINK_DE_FORMULARIO_AQUI"
+FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform?usp=header"
 
 st.title("💰 Mi Control Financiero Permanente")
 
@@ -72,3 +72,4 @@ with tab_carga:
     st.info("Completá el formulario abajo. Al terminar, dale a 'Enviar' y los datos aparecerán en la pestaña de Resumen.")
     # Formulario de Google embebido
     st.components.v1.iframe(FORM_LINK, height=800, scrolling=True)
+
