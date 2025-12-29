@@ -6,7 +6,7 @@ st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="�
 
 # --- CONFIGURACIÓN DE ENLACES ---
 # 1. Pegá aquí el link largo que copiaste recién
-EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m30Tw2p8sr8LRs_ZuEpIskZqZsdr0y7-/pub?output=csv"
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQGHyOERYRdBB_KqWJjBvBG43Ujuf9y8xYFseHbX_ElKNLOAT_sStrolGifSVOGSsWJpanYtCq9fJz/pub?output=csv"
 
 # 2. Corregimos el del formulario (le borramos el final para que no dé error)
 FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform"
@@ -71,6 +71,7 @@ with tab_carga:
     # Ponemos un botón grande para que se abra perfecto en el celu
     st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
     st.info("Hacé clic arriba para cargar un gasto. Al terminar, volvé aquí y actualizá para ver los gráficos.")
+
 
 
 
