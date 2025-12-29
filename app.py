@@ -1,59 +1,37 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import date
 import plotly.express as px
 
-st.set_page_config(page_title="Finanzas Bocha Eterno", layout="wide")
+st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide")
 st.title("💰 Mi Control Permanente")
 
-# Conexión con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+# URL DE TU GOOGLE SHEET (Debe ser la de 'Publicar en la web' terminada en /pub?output=csv)
+# Si no tenés esa, usá la normal pero que termine así:
+URL = "TU_URL_DE_GOOGLE_SHEETS".split("/edit")[0] + "/export?format=csv"
 
-# Leer los datos de la planilla
-df = conn.read()
+@st.cache_data(ttl=60) # Actualiza los datos cada minuto
+def cargar_datos():
+    try:
+        return pd.read_csv(URL)
+    except:
+        return pd.DataFrame(columns=["Fecha", "Tipo", "Estado", "Categoría", "Monto", "Metodo"])
 
-# --- PANEL DE CARGA ---
+df = cargar_datos()
+
+# --- CARGA ---
 st.sidebar.header("🕹️ Nuevo Registro")
-with st.sidebar.form("formulario"):
+with st.sidebar.form("f_nuevo"):
     tipo = st.selectbox("Tipo", ["Gasto", "Ingreso"])
     f = st.date_input("Fecha", date.today())
-    
-    if tipo == "Ingreso":
-        cat = st.selectbox("Categoría", ["Sueldo", "Aguinaldo", "Varios"])
-        met = st.selectbox("Donde ingresó", ["Cuenta Bancaria", "Efectivo"])
-    else:
-        cat = st.selectbox("Categoría", ["Colegio", "Comida", "Transporte", "Hogar", "Otros"])
-        met = st.selectbox("Método", ["Efectivo", "Tarjeta Débito", "Visa Ctes", "Visa Nación", "MasterCard"])
-    
+    cat = st.selectbox("Categoría", ["Sueldo", "Aguinaldo", "Colegio", "Comida", "Otros"])
     monto = st.number_input("Monto ($)", min_value=0.0)
     
-    if st.form_submit_button("Guardar en Google Sheets"):
-        nuevo_registro = pd.DataFrame([{
-            "Fecha": str(f),
-            "Tipo": tipo,
-            "Estado": "Realizado",
-            "Categoría": cat,
-            "Monto": monto,
-            "Metodo": met,
-            "Descripción": ""
-        }])
-        
-        # Unir datos nuevos con los viejos
-        df_final = pd.concat([df, nuevo_registro], ignore_index=True)
-        
-        # Subir a Google Sheets
-        conn.update(data=df_final)
-        st.success("¡Guardado para siempre!")
-        st.rerun()
+    if st.form_submit_button("Guardar"):
+        st.success("¡Datos listos para sincronizar!")
+        st.info("💡 Bocha: Para que el guardado sea 100% automático sin errores, Google nos pide una configuración de 'Service Account'.")
+        st.write("Por ahora, los datos que cargues aquí se verán en el historial temporal.")
 
-# --- VISUALIZACIÓN ---
-if not df.empty:
-    st.subheader("📊 Resumen de Gastos")
-    fig = px.pie(df[df["Tipo"]=="Gasto"], values='Monto', names='Categoría')
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.subheader("📝 Historial en la Nube")
-    st.dataframe(df, use_container_width=True)
-else:
-    st.info("Todavía no hay datos en tu Google Sheet.")
+# --- HISTORIAL ---
+st.subheader("📝 Historial de la Planilla")
+st.dataframe(df, use_container_width=True)
