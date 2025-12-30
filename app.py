@@ -14,60 +14,58 @@ tab_resumen, tab_carga = st.tabs(["📊 Resumen y Balances", "📝 Cargar Datos"
 
 with tab_resumen:
     try:
-        # Cargamos los datos ignorando errores de columnas extra
         df = pd.read_csv(EXCEL_CSV)
         
         if not df.empty:
-            # Forzamos los nombres de las primeras 7 columnas que vemos en tu foto
-            # [Marca, Fecha, TIPO, Categoría, Monto, Método, Descripción]
-            cols_necesarias = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']
-            df.columns = list(cols_necesarias) + list(df.columns[len(cols_necesarias):])
+            # Orden de columnas: Timestamp, Fecha, Tipo, Categoría, Monto, Método, Concepto, Estado
+            cols_base = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto', 'Estado']
+            df.columns = list(cols_base) + list(df.columns[len(cols_base):])
             
-            # Limpieza de montos
             df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce').fillna(0)
             
-            # Filtramos Gastos (EGRESO) e Ingresos
-            # Usamos .str.contains para que detecte "EGRESO" o "INGRESO" sin importar mayúsculas
-            mask_gastos = df['Tipo'].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)
-            mask_ingresos = df['Tipo'].astype(str).str.contains('INGRESO', case=False, na=False)
+            # --- CÁLCULOS ---
+            ingresos = df[df['Tipo'].str.contains('INGRESO', case=False, na=False)]['Monto'].sum()
             
-            df_gastos = df[mask_gastos]
-            df_ingresos = df[mask_ingresos]
+            # Gastos ya pagados
+            gastos_pagados = df[(df['Tipo'].str.contains('EGRESO|GASTO', case=False, na=False)) & 
+                                (df['Estado'].str.contains('Realizado|Pagado', case=False, na=False))]['Monto'].sum()
             
-            total_ingresos = df_ingresos["Monto"].sum()
-            total_gastos = df_gastos["Monto"].sum()
-            balance = total_ingresos - total_gastos
+            # Gastos PENDIENTES
+            pendientes = df[(df['Tipo'].str.contains('EGRESO|GASTO', case=False, na=False)) & 
+                            (df['Estado'].str.contains('Pendiente', case=False, na=False))]['Monto'].sum()
             
+            balance_actual = ingresos - gastos_pagados
+            balance_final = balance_actual - pendientes
+
             # --- MÉTRICAS ---
             c1, c2, c3 = st.columns(3)
-            c1.metric("Total Ingresos", f"${total_ingresos:,.2f}")
-            c2.metric("Total Gastos", f"${total_gastos:,.2f}")
-            c3.metric("Saldo Real", f"${balance:,.2f}")
+            c1.metric("Balance Actual (Caja)", f"${balance_actual:,.2f}")
+            c2.metric("Pagos Pendientes", f"${pendientes:,.2f}", delta="- Deuda", delta_color="inverse")
+            c3.metric("Saldo Final Neto", f"${balance_final:,.2f}", help="Es lo que te queda después de pagar los pendientes")
             
             st.divider()
             
             # --- GRÁFICOS ---
+            df_gastos = df[df['Tipo'].str.contains('EGRESO|GASTO', case=False, na=False)]
             if not df_gastos.empty:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     fig_cat = px.pie(df_gastos, values='Monto', names='Categoría', title="Gastos por Categoría")
                     st.plotly_chart(fig_cat, use_container_width=True)
                 with col_b:
-                    fig_met = px.bar(df_gastos, x='Método', y='Monto', title="Gastos por Medio de Pago", color='Método')
+                    # Gráfico de barras que muestra qué está pagado y qué no
+                    fig_met = px.bar(df_gastos, x='Método', y='Monto', color='Estado', title="Estado de Pagos por Medio")
                     st.plotly_chart(fig_met, use_container_width=True)
             
-            st.subheader("📝 Historial de Movimientos")
-            # Mostramos solo las columnas principales para que no quede gigante
-            st.dataframe(df[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']], use_container_width=True)
+            st.subheader("📝 Historial")
+            st.dataframe(df[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Estado']], use_container_width=True)
             
         else:
-            st.warning("El Excel está conectado pero parece estar vacío.")
+            st.warning("No hay datos en el Excel.")
             
     except Exception as e:
-        st.error("Error al leer los datos. Verificá el link CSV.")
-        st.info("Asegurate de que el Excel esté publicado como CSV.")
+        st.error("Error. Revisá que el Formulario tenga la columna 'Estado'.")
 
 with tab_carga:
     st.subheader("Registrar Nuevo Movimiento")
     st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
-
