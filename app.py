@@ -18,20 +18,19 @@ with tab_resumen:
         if not df.empty:
             df.columns = [c.strip() for c in df.columns]
             
-            # --- BUSCADOR DE COLUMNAS ---
-            def encontrar_columna(lista_palabras):
-                for palabra in lista_palabras:
-                    for col in df.columns:
-                        if palabra.upper() in col.upper():
-                            return col
+            # --- BUSCADOR ULTRA AGRESIVO ---
+            def encontrar_col(palabras):
+                for p in palabras:
+                    for c in df.columns:
+                        if p.upper() in c.upper(): return c
                 return None
 
-            col_tipo = encontrar_columna(['TIPO', 'CARGAR', 'MOVIMIENTO'])
+            col_tipo = encontrar_col(['TIPO', 'CARGAR', 'MOVIMIENTO'])
             cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
-            col_medio = encontrar_columna(['MÉTODO', 'MEDIO', 'PAGO'])
-            col_estado = encontrar_columna(['ESTADO'])
-            col_cat_gasto = encontrar_columna(['CATEGORÍA DE GASTO', 'GASTO'])
-            col_cat_ingreso = encontrar_columna(['CATEGORÍA DE INGRESO', 'INGRESO'])
+            col_medio = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
+            col_estado = encontrar_col(['ESTADO'])
+            col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO'])
+            col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
 
             # Limpiar montos
             for col in cols_montos:
@@ -61,4 +60,39 @@ with tab_resumen:
             
             # --- MÉTRICAS ---
             c1, c2, c3 = st.columns(3)
-            c1.
+            c1.metric("Disponible (Caja)", f"${disponible:,.2f}")
+            c2.metric("Deuda Pendiente", f"${monto_deuda:,.2f}", delta_color="inverse")
+            c3.metric("Saldo Neto Final", f"${disponible - monto_deuda:,.2f}")
+            
+            st.divider()
+
+            # --- FILA DE GRÁFICOS ---
+            g1, g2 = st.columns(2)
+            with g1:
+                st.write("### ⚖️ Ingresos vs Gastos")
+                df_graf = df.groupby(['Cat_Grafico', col_tipo])['Suma_Final'].sum().reset_index()
+                fig_bar = px.bar(df_graf, x='Cat_Grafico', y='Suma_Final', color=col_tipo, barmode='group',
+                                 color_discrete_map={'INGRESO': '#2ecc71', 'EGRESO': '#e74c3c', 'GASTO': '#e74c3c'})
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            with g2:
+                st.write("### 🍕 Torta de Gastos")
+                if not df_egr.empty:
+                    fig_pie = px.pie(df_egr, values='Suma_Final', names='Cat_Grafico', hole=0.4)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error al organizar los datos: {e}")
+
+with tab_tarjeta:
+    st.subheader("🔎 Detalle de Tarjeta de Crédito")
+    try:
+        col_m = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
+        df_t = df[df[col_m].astype(str).str.contains('CREDITO', case=False, na=False)]
+        st.dataframe(df_t, use_container_width=True)
+    except:
+        st.write("Cargá datos para ver el detalle.")
+
+with tab_carga:
+    st.subheader("Registrar Movimiento")
+    st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True)
