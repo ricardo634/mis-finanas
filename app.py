@@ -16,7 +16,6 @@ with tab_resumen:
     try:
         df = pd.read_csv(EXCEL_CSV)
         if not df.empty:
-            # Limpiamos nombres de columnas
             df.columns = [c.strip() for c in df.columns]
             
             # --- RASTREADOR DE COLUMNAS ---
@@ -27,26 +26,25 @@ with tab_resumen:
             cols_montos = [c for c in df.columns if 'MONTO' in c.upper()]
             col_medio = encontrar('MÉTODO') or encontrar('MEDIO')
             col_estado = encontrar('ESTADO')
+            # Buscamos categorías de ambos tipos
             col_cat_gasto = encontrar('CATEGORÍA DE GASTO') or encontrar('CATEGORÍA')
             col_cat_ingreso = encontrar('CATEGORÍA DE INGRESO')
-            col_concepto = encontrar('CONCEPTO') or encontrar('DESCRIPCIÓN')
 
-            # Limpiamos montos y creamos una columna total
+            # Limpiamos montos y unificamos
             for col in cols_montos:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            df['Monto_Final'] = df[cols_montos].sum(axis=1)
             
-            # Unificamos categorías para el gráfico
+            df['Suma_Total'] = df[cols_montos].sum(axis=1)
             df['Cat_Unificada'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("General")
 
             # --- CÁLCULOS ---
             df_ing = df[df[col_tipo].astype(str).str.contains('INGRESO', case=False, na=False)]
-            total_ing = df_ing['Monto_Final'].sum()
+            total_ing = df_ing['Suma_Total'].sum()
             
             df_egr = df[df[col_tipo].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)]
-            total_egr = df_egr['Monto_Final'].sum()
+            total_egr = df_egr['Suma_Total'].sum()
             
-            # Deuda (Pendientes o Tarjeta)
+            # Deuda
             df_deuda = pd.DataFrame()
             if col_estado and col_medio:
                 es_pend = df_egr[col_estado].astype(str).str.contains('PENDIENTE', case=False, na=False)
@@ -54,14 +52,14 @@ with tab_resumen:
                 no_pago = ~df_egr[col_estado].astype(str).str.contains('REALIZADO|PAGADO', case=False, na=False)
                 df_deuda = df_egr[es_pend | (es_tarj & no_pago)]
             
-            monto_deuda = df_deuda['Monto_Final'].sum() if not df_deuda.empty else 0
+            monto_deuda = df_deuda['Suma_Total'].sum() if not df_deuda.empty else 0
             disponible = total_ing - (total_egr - monto_deuda)
             
             # --- 🚩 PANEL DE ALERTAS ---
             if not df_deuda.empty:
                 st.error(f"### 🚩 ¡Tenés {len(df_deuda)} pagos pendientes!")
                 with st.expander("VER DETALLE DE DEUDAS", expanded=True):
-                    st.table(df_deuda[[df.columns[1], 'Cat_Unificada', 'Monto_Final']])
+                    st.table(df_deuda[[df.columns[1], 'Cat_Unificada', 'Suma_Total']])
                 st.divider()
 
             # --- MÉTRICAS ---
@@ -72,26 +70,26 @@ with tab_resumen:
             
             st.divider()
 
-            # --- NUEVO GRÁFICO COMPARATIVO ---
+            # --- GRÁFICO COMPARATIVO ---
             st.write("### ⚖️ Comparativa: Ingresos vs Gastos por Categoría")
-            df_graf = df.groupby(['Cat_Unificada', col_tipo])['Monto_Final'].sum().reset_index()
-            fig = px.bar(df_graf, x='Cat_Unificada', y='Monto_Final', color=col_tipo, barmode='group',
+            df_graf = df.groupby(['Cat_Unificada', col_tipo])['Suma_Total'].sum().reset_index()
+            fig = px.bar(df_graf, x='Cat_Unificada', y='Suma_Total', color=col_tipo, barmode='group',
                          color_discrete_map={'INGRESO': '#2ecc71', 'EGRESO': '#e74c3c', 'GASTO': '#e74c3c'})
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Hubo un problema con los datos: {e}")
+        st.error(f"Problema con los datos: {e}")
 
 with tab_tarjeta:
     st.subheader("🔎 Detalle de Tarjeta de Crédito")
     try:
         df_tarj = df[df[col_medio].astype(str).str.contains('CREDITO', case=False, na=False)]
         if not df_tarj.empty:
-            st.info(f"Consumos totales: ${df_tarj['Monto_Final'].sum():,.2f}")
+            st.info(f"Consumos totales: ${df_tarj['Suma_Total'].sum():,.2f}")
             st.dataframe(df_tarj, use_container_width=True)
     except:
         st.write("Sin datos.")
 
 with tab_carga:
     st.subheader("Registrar Movimiento")
-    st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True)
+    st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True) 
