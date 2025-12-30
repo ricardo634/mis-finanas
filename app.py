@@ -18,7 +18,7 @@ with tab_resumen:
         if not df.empty:
             df.columns = [c.strip() for c in df.columns]
             
-            # --- BUSCADOR ULTRA AGRESIVO ---
+            # --- BUSCADOR DE COLUMNAS ---
             def encontrar_col(palabras):
                 for p in palabras:
                     for c in df.columns:
@@ -31,6 +31,7 @@ with tab_resumen:
             col_estado = encontrar_col(['ESTADO'])
             col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO'])
             col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
+            col_fecha = df.columns[1] # Usualmente la segunda columna después de la marca temporal
 
             # Limpiar montos
             for col in cols_montos:
@@ -46,7 +47,6 @@ with tab_resumen:
             df_egr = df[df[col_tipo].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)]
             total_egr = df_egr['Suma_Final'].sum()
             
-            # Deuda
             monto_deuda = 0
             df_deuda = pd.DataFrame()
             if col_estado and col_medio:
@@ -76,20 +76,27 @@ with tab_resumen:
                 st.plotly_chart(fig_bar, use_container_width=True)
 
             with g2:
-                st.write("### 🍕 Torta de Gastos")
+                st.write("### 🍕 Torta de Gastos por Categoría")
                 if not df_egr.empty:
                     fig_pie = px.pie(df_egr, values='Suma_Final', names='Cat_Grafico', hole=0.4)
                     st.plotly_chart(fig_pie, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error al organizar los datos: {e}")
+        st.error(f"Error: {e}")
 
 with tab_tarjeta:
-    st.subheader("🔎 Detalle de Tarjeta de Crédito")
+    st.subheader("💳 Detalle de Gastos con Tarjeta")
     try:
         col_m = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
-        df_t = df[df[col_m].astype(str).str.contains('CREDITO', case=False, na=False)]
-        st.dataframe(df_t, use_container_width=True)
+        df_t = df[df[col_m].astype(str).str.contains('CREDITO', case=False, na=False)].copy()
+        if not df_t.empty:
+            st.warning(f"Total acumulado en Tarjeta: ${df_t['Suma_Final'].sum():,.2f}")
+            # Limpiamos la vista: solo columnas clave
+            vista_limpia = df_t[[col_fecha, col_cat_gasto, 'Suma_Final']]
+            vista_limpia.columns = ['Fecha', 'Categoría', 'Importe $']
+            st.table(vista_limpia)
+        else:
+            st.info("No hay gastos con tarjeta registrados.")
     except:
         st.write("Cargá datos para ver el detalle.")
 
