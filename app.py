@@ -10,84 +10,80 @@ FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwns
 
 st.title("💰 Mi Control Financiero")
 
-tab_resumen, tab_historial, tab_carga = st.tabs(["📊 Resumen y Gráficos", "💳 Detalle por Banco", "📝 Cargar Datos"])
+# Creamos 3 pestañas para que sea más ordenado
+tab_resumen, tab_bancos, tab_carga = st.tabs(["📊 Resumen y Balances", "💳 Detalle por Tarjeta/Banco", "📝 Cargar Datos"])
 
 try:
     df = pd.read_csv(EXCEL_CSV)
+    
     if not df.empty:
-        # Limpieza de nombres de columnas
-        df.columns = [str(c).strip() for c in df.columns]
+        # Forzamos nombres para las columnas principales
+        # [Marca, Fecha, TIPO, Categoría, Monto, Método, Descripción, BANCO...]
+        cols_base = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']
+        # Mantenemos el resto de las columnas originales para capturar el Banco
+        df.columns = cols_base + list(df.columns[len(cols_base):])
         
-        # --- BUSCADOR DE COLUMNAS ---
-        def encontrar_col(palabras):
-            for p in palabras:
-                for c in df.columns:
-                    if p.upper() in c.upper(): return c
-            return None
+        # Limpieza de montos
+        df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce').fillna(0)
+        
+        # Separamos Ingresos y Gastos
+        df_gastos = df[df['Tipo'].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)].copy()
+        df_ingresos = df[df['Tipo'].astype(str).str.contains('INGRESO', case=False, na=False)].copy()
 
-        col_tipo = encontrar_col(['TIPO', 'CARGAR', 'MOVIMIENTO'])
-        cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
-        col_medio = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
-        col_banco = encontrar_col(['CUAL TARJETA', 'BANCO', 'NOMBRE', 'TARJETA'])
-        col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO', 'CATEGORIA'])
-        col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
-        col_fecha = encontrar_col(['FECHA']) or df.columns[1]
-        col_concepto = encontrar_col(['CONCEPTO', 'DETALLE', 'DESCRIPCION']) or df.columns[4]
-
-        # Limpiar y sumar montos
-        for col in cols_montos:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df['Monto_Total'] = df[cols_montos].sum(axis=1)
-        df['Cat_Final'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("Otros")
-
-        # 1. PESTAÑA RESUMEN
+        # --- PESTAÑA 1: RESUMEN ---
         with tab_resumen:
-            df_ing = df[df[col_tipo].astype(str).str.contains('INGRESO', case=False, na=False)]
-            df_egr = df[df[col_tipo].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)]
-            
-            t_ing = df_ing['Monto_Total'].sum()
-            t_egr = df_egr['Monto_Total'].sum()
+            total_ing = df_ingresos["Monto"].sum()
+            total_gas = df_gastos["Monto"].sum()
             
             c1, c2, c3 = st.columns(3)
-            c1.metric("Ingresos", f"${t_ing:,.2f}")
-            c2.metric("Gastos", f"${t_egr:,.2f}")
-            c3.metric("Saldo", f"${t_ing - t_egr:,.2f}")
+            c1.metric("Total Ingresos", f"${total_ing:,.2f}")
+            c2.metric("Total Gastos", f"${total_gas:,.2f}")
+            c3.metric("Saldo Real", f"${total_ing - total_gas:,.2f}")
             
             st.divider()
-            g1, g2 = st.columns(2)
-            with g1:
-                st.write("### ⚖️ Gastos por Categoría")
-                fig_bar = px.bar(df_egr.groupby('Cat_Final')['Monto_Total'].sum().reset_index(), x='Cat_Final', y='Monto_Total', color='Cat_Final')
-                st.plotly_chart(fig_bar, use_container_width=True)
-            with g2:
-                st.write("### 🍕 Torta de Gastos")
-                st.plotly_chart(px.pie(df_egr, values='Monto_Total', names='Cat_Final', hole=0.4), use_container_width=True)
-
-        # 2. PESTAÑA HISTORIAL POR BANCO (Lo que pediste)
-        with tab_historial:
-            st.subheader("💳 Detalle por Tarjeta Bancaria")
             
-            # Filtramos solo los gastos hechos con tarjeta
-            df_tarjetas = df_egr[df_egr[col_medio].astype(str).str.contains('CRED', case=False, na=False)].copy()
+            col_a, col_b = st.columns(2)
+            with col_a:
+                fig_cat = px.pie(df_gastos, values='Monto', names='Categoría', title="¿En qué se va la plata? (Categorías)")
+                st.plotly_chart(fig_cat, use_container_width=True)
+            with col_b:
+                fig_met = px.bar(df_gastos.groupby('Método')['Monto'].sum().reset_index(), 
+                                 x='Método', y='Monto', title="Gastos por Medio de Pago", color='Método')
+                st.plotly_chart(fig_met, use_container_width=True)
+
+        # --- PESTAÑA 2: DETALLE POR BANCO (Lo que pediste) ---
+        with tab_bancos:
+            st.subheader("🔍 Análisis de Tarjetas y Bancos")
+            
+            # Buscamos la columna donde elegís el banco (suele ser la 8va o 9na columna)
+            # Vamos a intentar detectarla automáticamente
+            col_banco_nombre = df.columns[7] if len(df.columns) > 7 else 'Método'
+            
+            # Filtramos solo lo que se pagó con Tarjeta
+            df_tarjetas = df_gastos[df_gastos['Método'].astype(str).str.contains('CRED', case=False, na=False)].copy()
             
             if not df_tarjetas.empty:
-                # Selector de Banco
-                opciones = ["TODAS"] + sorted(df_tarjetas[col_banco].dropna().unique().tolist())
-                banco_sel = st.selectbox("Seleccioná el Banco o Tarjeta:", opciones)
+                # Selector de Banco/Tarjeta
+                lista_bancos = ["TODOS"] + sorted(df_tarjetas[col_banco_nombre].dropna().unique().tolist())
+                banco_sel = st.selectbox("Seleccioná la Tarjeta o Banco:", lista_bancos)
                 
-                df_final = df_tarjetas if banco_sel == "TODAS" else df_tarjetas[df_tarjetas[col_banco] == banco_sel]
+                df_filtro = df_tarjetas if banco_sel == "TODOS" else df_tarjetas[df_tarjetas[col_banco_nombre] == banco_sel]
                 
-                st.info(f"Total gastado en {banco_sel}: ${df_final['Monto_Total'].sum():,.2f}")
+                st.warning(f"Consumo Total en {banco_sel}: ${df_filtro['Monto'].sum():,.2f}")
                 
-                # Tabla limpia
-                vista = df_final[[col_fecha, col_banco, 'Cat_Final', col_concepto, 'Monto_Total']]
-                vista.columns = ['Fecha', 'Banco/Tarjeta', 'Categoría', 'Detalle', 'Monto $']
-                st.dataframe(vista.sort_values(by='Fecha', ascending=False), use_container_width=True)
+                # Tabla de historial limpia
+                st.write("### 📜 Movimientos de esta selección")
+                st.dataframe(df_filtro[['Fecha', col_banco_nombre, 'Categoría', 'Concepto', 'Monto']], use_container_width=True)
             else:
-                st.info("No hay gastos con tarjeta registrados.")
+                st.info("No hay gastos registrados con Tarjeta de Crédito todavía.")
+
+        # --- PESTAÑA 3: CARGA ---
+        with tab_carga:
+            st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
+
+    else:
+        st.warning("El Excel está vacío.")
 
 except Exception as e:
-    st.error(f"Error: {e}")
-
-with tab_carga:
-    st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True)
+    st.error(f"Error técnico: {e}")
+    st.info("Avisame si cambiaste alguna pregunta del formulario.")
