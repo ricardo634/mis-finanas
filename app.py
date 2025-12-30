@@ -4,76 +4,64 @@ import plotly.express as px
 
 st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="💰")
 
-# --- CONFIGURACIÓN DE ENLACES ---
-# 1. Pegá aquí el link largo que copiaste recién
-EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQGHyOERYRdBB_KqWJjBvBG43Ujuf9y8xYFseHbX_ElKNLOAT_sStrolGifSVOGSsWJpanYtCq9fJz/pub?output=csv"
-
-# 2. Corregimos el del formulario (le borramos el final para que no dé error)
+# --- ENLACES ---
+# Asegurate de que este sea el link que termina en pub?output=csv
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m3OTw2p8sr8LRs_ZuEplskZqZsdrOy7-/pub?output=csv"
 FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform"
-st.title("💰 Mi Control Financiero Permanente")
 
-# --- TABS ---
-tab_graficos, tab_carga = st.tabs(["📊 Resumen y Balances", "📝 Cargar Datos"])
+st.title("💰 Mi Control Financiero")
 
-with tab_graficos:
+tab_resumen, tab_carga = st.tabs(["📊 Resumen y Balances", "📝 Cargar Datos"])
+
+with tab_resumen:
     try:
-        # Leemos los datos desde Google Sheets
+        # Forzamos la descarga de datos nuevos
         df = pd.read_csv(EXCEL_CSV)
         
         if not df.empty:
-            # Renombramos columnas por si Google Forms les puso nombres largos
-            # Asumimos orden: [Marca Temporal, Fecha, Tipo, Categoría, Monto, Método]
-            df.columns = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método']
+            # TRUCO: Renombramos las columnas por su posición para evitar errores de nombres
+            # 0:Marca temporal, 1:Fecha, 2:Tipo, 3:Categoría, 4:Monto, 5:Método
+            nuevos_nombres = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método']
+            df.columns = nuevos_nombres[:len(df.columns)]
             
-            # --- SECCIÓN DE BALANCE ---
-            total_ingresos = df[df["Tipo"] == "Ingreso"]["Monto"].sum()
-            total_gastos = df[df["Tipo"] == "Gasto"]["Monto"].sum()
-            balance = total_ingresos - total_gastos
+            # Limpiamos los números (quita el signo $ si lo hay)
+            df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce').fillna(0)
             
-            st.subheader("💵 Balance General")
+            # --- CÁLCULOS ---
+            ingresos = df[df["Tipo"].str.contains("Ingreso", case=False, na=False)]["Monto"].sum()
+            gastos = df[df["Tipo"].str.contains("Gasto", case=False, na=False)]["Monto"].sum()
+            balance = ingresos - gastos
+            
+            # --- MÉTRICAS ---
             c1, c2, c3 = st.columns(3)
-            c1.metric("Total Ingresos", f"${total_ingresos:,.2f}")
-            c2.metric("Total Gastos", f"${total_gastos:,.2f}")
-            c3.metric("Saldo Disponible", f"${balance:,.2f}", delta=f"${balance}")
+            c1.metric("Total Ingresos", f"${ingresos:,.2f}")
+            c2.metric("Total Gastos", f"${gastos:,.2f}")
+            c3.metric("Saldo Real", f"${balance:,.2f}")
             
             st.divider()
             
-            # --- SECCIÓN DE GRÁFICOS ---
+            # --- GRÁFICOS ---
             col_a, col_b = st.columns(2)
+            df_gastos = df[df["Tipo"].str.contains("Gasto", case=False, na=False)]
             
-            with col_a:
-                st.write("### 📂 Gastos por Categoría")
-                fig_cat = px.pie(df[df["Tipo"]=="Gasto"], values='Monto', names='Categoría', hole=0.4)
-                st.plotly_chart(fig_cat, use_container_width=True)
-                
-            with col_b:
-                st.write("### 💳 Gastos por Tarjeta / Medio")
-                # Filtramos solo los gastos para ver en qué tarjeta se fue la plata
-                df_gastos = df[df["Tipo"]=="Gasto"]
-                fig_tarj = px.bar(df_gastos, x='Método', y='Monto', color='Método', title="Uso de Tarjetas y Efectivo")
-                st.plotly_chart(fig_tarj, use_container_width=True)
+            if not df_gastos.empty:
+                with col_a:
+                    fig_cat = px.pie(df_gastos, values='Monto', names='Categoría', title="Gastos por Categoría")
+                    st.plotly_chart(fig_cat, use_container_width=True)
+                with col_b:
+                    fig_met = px.bar(df_gastos, x='Método', y='Monto', title="Gastos por Tarjeta/Medio", color='Método')
+                    st.plotly_chart(fig_met, use_container_width=True)
             
-            st.divider()
-            
-            # --- HISTORIAL ---
-            st.subheader("📝 Historial Detallado")
-            st.dataframe(df.sort_values(by="Fecha", ascending=False), use_container_width=True)
+            st.subheader("📝 Historial")
+            st.dataframe(df.sort_values(by=df.columns[0], ascending=False), use_container_width=True)
             
         else:
-            st.info("Aún no hay datos. Cargá tu primer movimiento en la pestaña 'Cargar Datos'.")
+            st.warning("El Excel está conectado pero no tiene datos cargados.")
             
     except Exception as e:
-        st.warning("Conectando con la base de datos de Google...")
-        st.write("Asegurate de haber pegado los links correctamente y que el Excel esté 'Publicado en la web'.")
+        st.error("Error al leer los datos. Verificá que el link de Publicar en la Web sea CSV.")
+        st.info("Si acabás de cargar un dato, esperá 30 segundos y actualizá la página.")
 
 with tab_carga:
     st.subheader("Registrar Nuevo Movimiento")
-    # Ponemos un botón grande para que se abra perfecto en el celu
     st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
-    st.info("Hacé clic arriba para cargar un gasto. Al terminar, volvé aquí y actualizá para ver los gráficos.")
-
-
-
-
-
-
