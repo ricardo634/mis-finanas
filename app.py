@@ -10,63 +10,47 @@ FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwns
 
 st.title("💰 Mi Control Financiero")
 
-tab_resumen, tab_carga = st.tabs(["📊 Resumen y Balances", "📝 Cargar Datos"])
+tab_resumen, tab_historial, tab_carga = st.tabs(["📊 Resumen y Gráficos", "💳 Historial por Banco", "📝 Cargar Datos"])
 
-with tab_resumen:
-    try:
-        # Cargamos los datos ignorando errores de columnas extra
-        df = pd.read_csv(EXCEL_CSV)
+try:
+    df = pd.read_csv(EXCEL_CSV)
+    if not df.empty:
+        # Limpieza de nombres de columnas (borra espacios vacíos invisibles)
+        df.columns = [str(c).strip() for c in df.columns]
         
-        if not df.empty:
-            # Forzamos los nombres de las primeras 7 columnas que vemos en tu foto
-            # [Marca, Fecha, TIPO, Categoría, Monto, Método, Descripción]
-            cols_necesarias = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']
-            df.columns = list(cols_necesarias) + list(df.columns[len(cols_necesarias):])
-            
-            # Limpieza de montos
-            df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce').fillna(0)
-            
-            # Filtramos Gastos (EGRESO) e Ingresos
-            # Usamos .str.contains para que detecte "EGRESO" o "INGRESO" sin importar mayúsculas
-            mask_gastos = df['Tipo'].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)
-            mask_ingresos = df['Tipo'].astype(str).str.contains('INGRESO', case=False, na=False)
-            
-            df_gastos = df[mask_gastos]
-            df_ingresos = df[mask_ingresos]
-            
-            total_ingresos = df_ingresos["Monto"].sum()
-            total_gastos = df_gastos["Monto"].sum()
-            balance = total_ingresos - total_gastos
-            
-            # --- MÉTRICAS ---
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Ingresos", f"${total_ingresos:,.2f}")
-            c2.metric("Total Gastos", f"${total_gastos:,.2f}")
-            c3.metric("Saldo Real", f"${balance:,.2f}")
-            
-            st.divider()
-            
-            # --- GRÁFICOS ---
-            if not df_gastos.empty:
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    fig_cat = px.pie(df_gastos, values='Monto', names='Categoría', title="Gastos por Categoría")
-                    st.plotly_chart(fig_cat, use_container_width=True)
-                with col_b:
-                    fig_met = px.bar(df_gastos, x='Método', y='Monto', title="Gastos por Medio de Pago", color='Método')
-                    st.plotly_chart(fig_met, use_container_width=True)
-            
-            st.subheader("📝 Historial de Movimientos")
-            # Mostramos solo las columnas principales para que no quede gigante
-            st.dataframe(df[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']], use_container_width=True)
-            
-        else:
-            st.warning("El Excel está conectado pero parece estar vacío.")
-            
-    except Exception as e:
-        st.error("Error al leer los datos. Verificá el link CSV.")
-        st.info("Asegurate de que el Excel esté publicado como CSV.")
+        # --- BUSCADOR INTELIGENTE DE COLUMNAS ---
+        def encontrar_col(palabras):
+            for p in palabras:
+                for c in df.columns:
+                    if p.upper() in c.upper(): return c
+            return None
 
-with tab_carga:
-    st.subheader("Registrar Nuevo Movimiento")
-    st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
+        # Identificamos las columnas del formulario
+        col_tipo = encontrar_col(['TIPO', 'CARGAR', 'MOVIMIENTO'])
+        cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
+        col_medio = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
+        col_banco = encontrar_col(['CUAL TARJETA', 'BANCO', 'NOMBRE', 'TARJETA']) # <--- Identifica Visa/Master/BBVA
+        col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO', 'CATEGORIA'])
+        col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
+        col_fecha = encontrar_col(['FECHA']) or df.columns[1]
+        col_concepto = encontrar_col(['CONCEPTO', 'DETALLE', 'DESCRIPCION']) or df.columns[4]
+
+        # Limpiar y sumar montos
+        for col in cols_montos:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        df['Monto_Total'] = df[cols_montos].sum(axis=1)
+        df['Cat_Final'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("Otros")
+
+        # 1. PESTAÑA RESUMEN
+        with tab_resumen:
+            df_ing = df[df[col_tipo].astype(str).str.contains('INGRESO', case=False, na=False)]
+            df_egr = df[df[col_tipo].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)]
+            
+            total_ing = df_ing['Monto_Total'].sum()
+            total_egr = df_egr['Monto_Total'].sum()
+            balance = total_ing - total_egr
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Ingresos Totales", f"${total_ing:,.2f}")
+            c2.metric("Gastos Totales", f"${total_egr:,.2f}")
+            c3.metric("Saldo Actual", f
