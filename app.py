@@ -15,7 +15,7 @@ tab_resumen, tab_tarjeta, tab_carga = st.tabs(["📊 Resumen y Gráficos", "💳
 try:
     df = pd.read_csv(EXCEL_CSV)
     if not df.empty:
-        # LIMPIEZA CRÍTICA: Quitamos espacios vacíos al principio y final de los nombres de columnas
+        # Limpieza de nombres de columnas
         df.columns = [str(c).strip() for c in df.columns]
         
         # --- BUSCADOR DE COLUMNAS ---
@@ -26,20 +26,20 @@ try:
             return None
 
         col_tipo = encontrar(['TIPO', 'CARGAR', 'MOVIMIENTO'])
-        # Buscamos todas las columnas que tengan montos
-        cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c or 'Total_Limpio' in c]
+        cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
         col_medio = encontrar(['MÉTODO', 'MEDIO', 'PAGO'])
         col_estado = encontrar(['ESTADO'])
-        col_cat_gasto = encontrar(['CATEGORÍA DE GASTO', 'GASTO'])
+        col_cat_gasto = encontrar(['CATEGORÍA DE GASTO', 'GASTO', 'CATEGORIA'])
         col_cat_ingreso = encontrar(['CATEGORÍA DE INGRESO', 'INGRESO'])
-        col_fecha = df.columns[1] 
+        col_fecha = encontrar(['FECHA', 'MARCA']) or df.columns[0]
+        col_concepto = encontrar(['CONCEPTO', 'DESCRIPCION', 'DETALLE']) or df.columns[4]
 
-        # Limpiar montos y crear una sola columna de valor
+        # Limpiar montos y crear columna final
         for col in cols_montos:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         df['Valor_Final'] = df[cols_montos].sum(axis=1)
         
-        # Unificar categorías
+        # Categoría unificada
         df['Cat_Grafico'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("General")
 
         with tab_resumen:
@@ -50,7 +50,6 @@ try:
             df_egr = df[df[col_tipo].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)]
             total_egr = df_egr['Valor_Final'].sum()
             
-            # Deuda (Pendientes o Tarjeta)
             monto_deuda = 0
             df_deuda = pd.DataFrame()
             if col_estado and col_medio:
@@ -62,7 +61,7 @@ try:
 
             disponible = total_ing - (total_egr - monto_deuda)
             
-            # --- MÉTRICAS ---
+            # Métricas
             c1, c2, c3 = st.columns(3)
             c1.metric("Disponible (Caja)", f"${disponible:,.2f}")
             c2.metric("Deuda Pendiente", f"${monto_deuda:,.2f}", delta_color="inverse")
@@ -70,36 +69,38 @@ try:
             
             st.divider()
 
-            # --- GRÁFICOS ---
             g1, g2 = st.columns(2)
             with g1:
                 st.write("### ⚖️ Ingresos vs Gastos")
                 df_graf = df.groupby(['Cat_Grafico', col_tipo])['Valor_Final'].sum().reset_index()
-                fig_bar = px.bar(df_graf, x='Cat_Grafico', y='Valor_Final', color=col_tipo, barmode='group',
-                                 color_discrete_map={'INGRESO': '#2ecc71', 'EGRESO': '#e74c3c', 'GASTO': '#e74c3c'})
-                st.plotly_chart(fig_bar, use_container_width=True)
-
+                st.plotly_chart(px.bar(df_graf, x='Cat_Grafico', y='Valor_Final', color=col_tipo, barmode='group',
+                                 color_discrete_map={'INGRESO': '#2ecc71', 'EGRESO': '#e74c3c', 'GASTO': '#e74c3c'}), use_container_width=True)
             with g2:
                 st.write("### 🍕 Torta de Gastos")
                 if not df_egr.empty:
-                    fig_pie = px.pie(df_egr, values='Valor_Final', names='Cat_Grafico', hole=0.4)
-                    st.plotly_chart(fig_pie, use_container_width=True)
+                    st.plotly_chart(px.pie(df_egr, values='Valor_Final', names='Cat_Grafico', hole=0.4), use_container_width=True)
 
         with tab_tarjeta:
             st.subheader("💳 Detalle de Gastos con Tarjeta")
-            # Filtramos por cualquier cosa que diga CRED (Credito, Crédito Corporativa, etc)
-            df_t = df[df[col_medio].astype(str).str.contains('CRED', case=False, na=False)].copy()
-            if not df_t.empty:
-                st.info(f"Monto total acumulado: ${df_t['Valor_Final'].sum():,.2f}")
-                # Mostramos tabla limpia
-                vista = df_t[[col_fecha, 'Cat_Grafico', 'Valor_Final']]
-                vista.columns = ['Fecha', 'Categoría', 'Monto $']
-                st.table(vista)
+            # Filtro agresivo para la tarjeta
+            if col_medio:
+                df_t = df[df[col_medio].astype(str).str.contains('CRED', case=False, na=False)].copy()
+                
+                if not df_t.empty:
+                    st.success(f"Monto total acumulado en Tarjeta: ${df_t['Valor_Final'].sum():,.2f}")
+                    
+                    # Seleccionamos dinámicamente qué columnas mostrar para que no falle
+                    columnas_a_mostrar = [c for c in [col_fecha, col_cat_gasto, col_concepto, 'Valor_Final'] if c is not None]
+                    
+                    # Mostramos la tabla
+                    st.dataframe(df_t[columnas_a_mostrar].sort_values(by=col_fecha, ascending=False), use_container_width=True)
+                else:
+                    st.info("No se encontraron gastos con 'Tarjeta de Crédito'. Verificá que el nombre en el Excel contenga la palabra 'CRED'.")
             else:
-                st.warning("No hay gastos registrados con Tarjeta de Crédito.")
+                st.error("No se encontró la columna de Medio de Pago.")
 
 except Exception as e:
-    st.error(f"Error detectado: {e}")
+    st.error(f"Error: {e}")
 
 with tab_carga:
     st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True)
