@@ -12,34 +12,34 @@ st.title("💰 Mi Control Financiero")
 
 tab_resumen, tab_tarjeta, tab_carga = st.tabs(["📊 Resumen y Gráficos", "💳 Solo Tarjetas", "📝 Cargar Datos"])
 
-with tab_resumen:
-    try:
-        df = pd.read_csv(EXCEL_CSV)
-        if not df.empty:
-            df.columns = [c.strip() for c in df.columns]
-            
-            # --- BUSCADOR DE COLUMNAS ---
-            def encontrar_col(palabras):
-                for p in palabras:
-                    for c in df.columns:
-                        if p.upper() in c.upper(): return c
-                return None
+try:
+    df = pd.read_csv(EXCEL_CSV)
+    if not df.empty:
+        df.columns = [c.strip() for c in df.columns]
+        
+        # --- BUSCADOR DE COLUMNAS MEJORADO ---
+        def encontrar_col(palabras):
+            for p in palabras:
+                for c in df.columns:
+                    if p.upper() in c.upper(): return c
+            return None
 
-            col_tipo = encontrar_col(['TIPO', 'CARGAR', 'MOVIMIENTO'])
-            cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
-            col_medio = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
-            col_estado = encontrar_col(['ESTADO'])
-            col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO'])
-            col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
-            col_fecha = df.columns[1] # Usualmente la segunda columna después de la marca temporal
+        col_tipo = encontrar_col(['TIPO', 'CARGAR', 'MOVIMIENTO'])
+        cols_montos = [c for c in df.columns if 'MONTO' in c.upper() or '$' in c]
+        col_medio = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
+        col_estado = encontrar_col(['ESTADO'])
+        col_cat_gasto = encontrar_col(['CATEGORÍA DE GASTO', 'GASTO'])
+        col_cat_ingreso = encontrar_col(['CATEGORÍA DE INGRESO', 'INGRESO'])
+        col_fecha = encontrar_col(['FECHA']) or df.columns[1]
 
-            # Limpiar montos
-            for col in cols_montos:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            df['Suma_Final'] = df[cols_montos].sum(axis=1)
-            df['Cat_Grafico'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("Otros")
+        # Limpiar montos
+        for col in cols_montos:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        df['Suma_Final'] = df[cols_montos].sum(axis=1)
+        df['Cat_Grafico'] = df[col_cat_gasto].fillna(df[col_cat_ingreso]).fillna("Otros")
 
+        with tab_resumen:
             # --- CÁLCULOS ---
             df_ing = df[df[col_tipo].astype(str).str.contains('INGRESO', case=False, na=False)]
             total_ing = df_ing['Suma_Final'].sum()
@@ -51,7 +51,8 @@ with tab_resumen:
             df_deuda = pd.DataFrame()
             if col_estado and col_medio:
                 es_pend = df_egr[col_estado].astype(str).str.contains('PENDIENTE', case=False, na=False)
-                es_tarj = df_egr[col_medio].astype(str).str.contains('CREDITO', case=False, na=False)
+                # Buscamos "CRED" para que tome Crédito, Credito, Crédito Corporativa, etc.
+                es_tarj = df_egr[col_medio].astype(str).str.contains('CRED', case=False, na=False)
                 no_pago = ~df_egr[col_estado].astype(str).str.contains('REALIZADO|PAGADO', case=False, na=False)
                 df_deuda = df_egr[es_pend | (es_tarj & no_pago)]
                 monto_deuda = df_deuda['Suma_Final'].sum()
@@ -66,7 +67,6 @@ with tab_resumen:
             
             st.divider()
 
-            # --- FILA DE GRÁFICOS ---
             g1, g2 = st.columns(2)
             with g1:
                 st.write("### ⚖️ Ingresos vs Gastos")
@@ -74,31 +74,28 @@ with tab_resumen:
                 fig_bar = px.bar(df_graf, x='Cat_Grafico', y='Suma_Final', color=col_tipo, barmode='group',
                                  color_discrete_map={'INGRESO': '#2ecc71', 'EGRESO': '#e74c3c', 'GASTO': '#e74c3c'})
                 st.plotly_chart(fig_bar, use_container_width=True)
-
             with g2:
-                st.write("### 🍕 Torta de Gastos por Categoría")
+                st.write("### 🍕 Torta de Gastos")
                 if not df_egr.empty:
                     fig_pie = px.pie(df_egr, values='Suma_Final', names='Cat_Grafico', hole=0.4)
                     st.plotly_chart(fig_pie, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+        with tab_tarjeta:
+            st.subheader("💳 Detalle de Gastos con Tarjeta")
+            # Filtro más flexible para encontrar la tarjeta
+            df_t = df[df[col_medio].astype(str).str.contains('CRED', case=False, na=False)].copy()
+            
+            if not df_t.empty:
+                st.warning(f"Total consumido con Tarjeta: ${df_t['Suma_Final'].sum():,.2f}")
+                # Mostramos una tabla más limpia
+                vista_tabla = df_t[[col_fecha, 'Cat_Grafico', 'Suma_Final']]
+                vista_tabla.columns = ['Fecha', 'Categoría', 'Monto $']
+                st.dataframe(vista_tabla, use_container_width=True)
+            else:
+                st.info("No se encontraron gastos con el medio de pago 'Crédito'. Revisá que esté bien escrito en el Excel.")
 
-with tab_tarjeta:
-    st.subheader("💳 Detalle de Gastos con Tarjeta")
-    try:
-        col_m = encontrar_col(['MÉTODO', 'MEDIO', 'PAGO'])
-        df_t = df[df[col_m].astype(str).str.contains('CREDITO', case=False, na=False)].copy()
-        if not df_t.empty:
-            st.warning(f"Total acumulado en Tarjeta: ${df_t['Suma_Final'].sum():,.2f}")
-            # Limpiamos la vista: solo columnas clave
-            vista_limpia = df_t[[col_fecha, col_cat_gasto, 'Suma_Final']]
-            vista_limpia.columns = ['Fecha', 'Categoría', 'Importe $']
-            st.table(vista_limpia)
-        else:
-            st.info("No hay gastos con tarjeta registrados.")
-    except:
-        st.write("Cargá datos para ver el detalle.")
+except Exception as e:
+    st.error(f"Error: {e}")
 
 with tab_carga:
     st.subheader("Registrar Movimiento")
