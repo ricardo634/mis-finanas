@@ -5,8 +5,7 @@ import plotly.express as px
 st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="💰")
 
 # --- ENLACES ---
-# Asegurate de que este link termine en pub?output=csv
-EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQGHyOERYRdBB_KqWJjBvBG43Ujuf9y8xYFseHbX_ElKNLOAT_sStrolGifSVOGSsWJpanYtCq9fJz/pub?output=csv"
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m3OTw2p8sr8LRs_ZuEplskZqZsdrOy7-/pub?output=csv"
 FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform"
 
 st.title("💰 Mi Control Financiero")
@@ -15,21 +14,25 @@ tab_resumen, tab_carga = st.tabs(["📊 Resumen y Balances", "📝 Cargar Datos"
 
 with tab_resumen:
     try:
-        # Cargamos los datos
+        # Cargamos los datos ignorando errores de columnas extra
         df = pd.read_csv(EXCEL_CSV)
         
         if not df.empty:
-            # Renombramos según tu Excel: Marca, Fecha, TIPO, Categoría, Monto, Método, Descripción
-            columnas_reales = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Descripción']
-            df.columns = columnas_reales[:len(df.columns)]
+            # Forzamos los nombres de las primeras 7 columnas que vemos en tu foto
+            # [Marca, Fecha, TIPO, Categoría, Monto, Método, Descripción]
+            cols_necesarias = ['Timestamp', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']
+            df.columns = list(cols_necesarias) + list(df.columns[len(cols_necesarias):])
             
-            # Limpieza de datos
+            # Limpieza de montos
             df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce').fillna(0)
             
-            # Ajuste para tus palabras: EGRESO / INGRESO
-            # Buscamos cualquier cosa que empiece con 'E' para gastos y con 'I' para ingresos
-            df_gastos = df[df["Tipo"].str.startswith(("E", "G"), na=False)]
-            df_ingresos = df[df["Tipo"].str.startswith(("I"), na=False)]
+            # Filtramos Gastos (EGRESO) e Ingresos
+            # Usamos .str.contains para que detecte "EGRESO" o "INGRESO" sin importar mayúsculas
+            mask_gastos = df['Tipo'].astype(str).str.contains('EGRESO|GASTO', case=False, na=False)
+            mask_ingresos = df['Tipo'].astype(str).str.contains('INGRESO', case=False, na=False)
+            
+            df_gastos = df[mask_gastos]
+            df_ingresos = df[mask_ingresos]
             
             total_ingresos = df_ingresos["Monto"].sum()
             total_gastos = df_gastos["Monto"].sum()
@@ -53,17 +56,17 @@ with tab_resumen:
                     fig_met = px.bar(df_gastos, x='Método', y='Monto', title="Gastos por Medio de Pago", color='Método')
                     st.plotly_chart(fig_met, use_container_width=True)
             
-            st.subheader("📝 Historial Detallado")
-            st.dataframe(df.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+            st.subheader("📝 Historial de Movimientos")
+            # Mostramos solo las columnas principales para que no quede gigante
+            st.dataframe(df[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Método', 'Concepto']], use_container_width=True)
             
         else:
             st.warning("El Excel está conectado pero parece estar vacío.")
             
     except Exception as e:
-        st.error(f"Error al leer los datos. Verificá el link CSV.")
-        st.info("Tip: Asegurate que en Google Sheets el link sea 'Valores separados por comas (.csv)'")
+        st.error("Error al leer los datos. Verificá el link CSV.")
+        st.info("Asegurate de que el Excel esté publicado como CSV.")
 
 with tab_carga:
     st.subheader("Registrar Nuevo Movimiento")
     st.link_button("📝 ABRIR FORMULARIO DE CARGA", FORM_LINK, use_container_width=True)
-
