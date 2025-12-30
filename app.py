@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(page_title="Finanzas Bocha PRO", layout="wide", page_icon="💳")
 
 # --- ENLACES ---
-EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRNOMeVh6rLo1CKWzxYMAaBhByk4F5HuVwfCDUAQVUnABG4m3OTw2p8sr8LRs_ZuEplskZqZsdrOy7-/pub?output=csv"
+EXCEL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQGHyOERYRdBB_KqWJjBvBG43Ujuf9y8xYFseHbX_ElKNLOAT_sStrolGifSVOGSsWJpanYtCq9fJz/pub?output=csv"
 FORM_LINK = "https://docs.google.com/forms/d/e/1FAIpQLSd5nLZX5Uihw--o_JuKYqxMwnsc4M-g6HupBCuO2xBqTvgC0w/viewform"
 
 st.title("💰 Mi Control Financiero")
@@ -95,3 +95,4 @@ with tab_tarjeta:
 with tab_carga:
     st.subheader("Registrar Movimiento")
     st.link_button("📝 IR AL FORMULARIO", FORM_LINK, use_container_width=True)
+
